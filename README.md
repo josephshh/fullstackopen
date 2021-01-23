@@ -1,2 +1,2 @@
 # fullstackopen
-Full Stack Open course solutions
+Full Stack Open solutions
