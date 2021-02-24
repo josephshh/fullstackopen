@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import axios from 'axios'
+import personsService from './services/persons'
+import './index.css'
 
 const Filter = ({newFilter, setNewFilter}) => {
 
@@ -14,16 +15,47 @@ const Filter = ({newFilter, setNewFilter}) => {
   )
 }
 
-const PersonForm = ({persons, setPersons, newName, newNumber, setNewName, setNewNumber}) => {
+const PersonForm = ({persons, setPersons, newName, newNumber, setNewName, setNewNumber, setNewMessage, setError}) => {
 
   const addName = (event) => {
     event.preventDefault()
-    if (persons.findIndex(person => person.name === newName) !== -1) {
-      alert(`${newName} is already added to phonebook`)
+
+    const index = persons.findIndex(person => person.name === newName)
+
+    if (index !== -1) {
+      if (window.confirm(`${newName} is already added to phonebook, replace the old number with a new one?`)) {
+
+        const person = persons.find(p => p.name === newName)
+        const id = person.id
+        const changedPerson = {...person, number: newNumber}
+
+        personsService
+          .update(id, changedPerson)
+          .then(response => {
+            setPersons(persons.map(person => person.id !== id ? person : response.data))
+          })
+        setNewMessage(`Changed ${changedPerson.name}`)
+        setError(false)
+        setTimeout(() => { setNewMessage(null) }, 5000)
+      }
     } else {
-      setPersons(persons.concat({name: newName, number: newNumber}))
-      setNewName('')
-      setNewNumber('')
+
+      const newPerson = {
+        name: newName, 
+        number: newNumber
+      }
+
+
+      personsService
+        .create(newPerson)
+        .then(response => {
+          setPersons(persons.concat(response.data))
+          setNewName('')
+          setNewNumber('')
+        })
+      setNewMessage(`Added ${newPerson.name}`)
+      setError(false)
+      setTimeout(() => { setNewMessage(null) }, 5000)
     }
   }
 
@@ -56,13 +88,49 @@ const PersonForm = ({persons, setPersons, newName, newNumber, setNewName, setNew
   )
 }
 
-const Persons = ({persons, newFilter}) => {
+const Persons = ({persons, setPersons, newFilter, setNewMessage, setError}) => {
   const personsToShow = newFilter
     ? persons.filter(person => person.name.toLowerCase().includes(newFilter.toLowerCase()))
     : persons
+
+  const handleDelete = (id, name) => {
+    if (window.confirm(`Delete ${name}?`)) {
+      personsService
+        .remove(id)
+        .then(response => 
+        {
+          setPersons(persons.filter(person => person.id !== id))
+        })
+        .catch(error => {
+          setPersons(persons.filter(person => person.id !== id))
+          setNewMessage(`Information of ${name} was already deleted from the server`)
+          setError(true)
+          setTimeout(() => {setNewMessage(null)}, 5000)
+        })
+    }
+  }
+
   return (
     <div>
-      {personsToShow.map(person => <p key={person.name}>{person.name} {person.number}</p>)}
+      {personsToShow.map(person => <p key={person.name}>{person.name} {person.number}<button onClick={() => handleDelete(person.id, person.name)}>delete</button></p>)}
+    </div>
+  )
+}
+
+const Notification = ({message, isError}) => {
+  if (message === null) {
+    return null
+  }
+  if (isError) {
+    return (
+      <div className="error">
+        {message}
+      </div>
+    )
+  }
+  return (
+    <div className="notif">
+      {message}
     </div>
   )
 }
@@ -72,27 +140,28 @@ const App = () => {
   const [ newName, setNewName ] = useState('')
   const [ newNumber, setNewNumber ] = useState('')
   const [ newFilter, setNewFilter ] = useState('')
+  const [ message, setNewMessage ] = useState(null)
+  const [ isError, setError ] = useState(true)
 
-  const hook = () => {
-    axios
-      .get('http://localhost:3001/persons')
+  useEffect(() => {
+    personsService
+      .getAll()
       .then(response => {
         setPersons(response.data)
       })
-  }
-
-  useEffect(hook, [])
+    }, [])
   
  return (
     <div>
       <h2>Phonebook</h2>
+        <Notification message={message} isError={isError}/>
         <Filter newFilter={newFilter} setNewFilter={setNewFilter} />
       <h3>add a new</h3>
       <PersonForm 
         persons = {persons} newName={newName} newNumber={newNumber} 
-        setPersons = {setPersons} setNewName={setNewName} setNewNumber={setNewNumber} />
+        setPersons = {setPersons} setNewName={setNewName} setNewNumber={setNewNumber} setNewMessage={setNewMessage} setError={setError}/>
       <h3>Numbers</h3>
-      <Persons persons={persons} newFilter={newFilter} />
+      <Persons persons={persons} setPersons={setPersons} newFilter={newFilter} setNewMessage={setNewMessage} setError={setError}/>
     </div>
   )
 }
